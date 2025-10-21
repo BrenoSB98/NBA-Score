@@ -1,13 +1,14 @@
 import requests
 import logging
 import time
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 
-from app.core.config import settings
+from app.core.config import get_settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+settings = get_settings()
 class ApiClient:
     
     def __init__(self):
@@ -28,8 +29,13 @@ class ApiClient:
             try:
                 response = requests.get(url, headers=self.headers, params=params, timeout=15)
                 response.raise_for_status()
-                json_data = response.json()
-                return json_data.get("response")            
+                data = response.json()
+                
+                if data and "response" in data:
+                    return data["response"]
+                else:
+                    logger.warning(f"Resposta da API para {url} com params {params} não continha a chave 'response'.")
+                    return None          
             except requests.exceptions.RequestException as e:
                 logger.error(f"Tentativa {attempt + 1} falhou para {url}: {e}")
                 attempt += 1

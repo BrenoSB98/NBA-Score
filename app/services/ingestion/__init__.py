@@ -1,0 +1,1 @@
+from .seasons_ingest import ingest_seasons

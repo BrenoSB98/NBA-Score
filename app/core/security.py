@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from jose import jwt, JWTError
+from jose import jwt
 from passlib.context import CryptContext
 
-from app.core.config import settings
+from app.core.config import get_settings
+
+settings = get_settings()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = settings.algorithm
