@@ -19,6 +19,7 @@ def fetch_league_data(api_client: APIClient, league_id: int) -> Optional[Dict[st
             logger.info(f"Dados da liga obtidos com sucesso para ID: {league_id}")
             return league_data
         logger.warning(f"Nenhum dado encontrado para a liga com ID: {league_id}")
+        return None
     except Exception as e:
         logger.error(f"Erro ao buscar dados da liga com ID {league_id}: {e}")
         return None
