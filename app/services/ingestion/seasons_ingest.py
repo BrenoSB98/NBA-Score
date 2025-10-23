@@ -57,12 +57,19 @@ def ingest_seasons(db: Session, api_client: ApiClient) -> Dict[str, Any]:
         if seasons_data:
             transformed_seasons = transform_season_data(seasons_data)
             upsert_seasons(db, transformed_seasons)
+            
+            db.commit()
+            
             summary["status"] = "success"
             summary["processed"] = len(transformed_seasons)
+            
     except Exception as e:
+        db.rollback()
         error_msg = f"Erro durante a ingestão de temporadas: {e}"
-        logger.error(error_msg)
+        logger.exception(error_msg)
         summary["errors"].append(error_msg)
+    finally:
+        db.close()
     
     logger.info(f"Resumo da ingestão de temporadas: {summary}")
     return summary

@@ -44,10 +44,17 @@ def transform_team_data(team_data: Dict[str, Any]) -> Tuple[TeamCreate, List[Tea
             "is_all_star": team.get("allStar"),
             "payload_hash": generate_payload_hash(team)
         }
-        team_schema = TeamCreate(**payload_team)
-        teams_to_upsert.append(team_schema)
+        try:
+            team_schema = TeamCreate(**payload_team)
+            teams_to_upsert.append(team_schema.model_dump())
+        except Exception as e:
+            logger.error(f"Erro ao transformar dados do time {team.get('name')}: {e}")
+            continue
         
         for league, details in team.get("leagues", {}).items():
+            if not details:
+                continue
+            
             payload_league = {
                 "team_id": team["id"],
                 "league_name": league,
@@ -55,8 +62,12 @@ def transform_team_data(team_data: Dict[str, Any]) -> Tuple[TeamCreate, List[Tea
                 "division": details.get("division"),
                 "payload_hash": generate_payload_hash(details)
             }
-            league_schema = TeamLeagueCreate(**payload_league)
-            teams_leagues_to_upsert.append(league_schema)
+            try:
+                league_schema = TeamLeagueCreate(**payload_league)
+                teams_leagues_to_upsert.append(league_schema.model_dump())
+            except Exception as e:
+                logger.error(f"Erro ao transformar dados da liga {league} para o time {team.get('name')}: {e}")
+                
     return teams_to_upsert, teams_leagues_to_upsert
 
 def upsert_teams_and_leagues(db: Session, teams_data: List[TeamCreate], leagues_data: List[TeamLeagueCreate]) -> None:
@@ -79,34 +90,47 @@ def ingest_teams(db: Session, api_client: APIClient) -> Dict[str, Any]:
     
     try:
         teams_data = fetch_teams_data(api_client)
+        
         if teams_data:
             teams_to_upsert, leagues_to_upsert = transform_team_data(teams_data)
             upsert_teams_and_leagues(db, teams_to_upsert, leagues_to_upsert)
+            
+            db.commit()
+            
             summary["status"] = "success"
             summary["processed"] = len(teams_to_upsert)
+    
     except Exception as e:
+        db.rollback()
         error_msg = f"Erro geral na ingestão de times: {e}"
-        logger.error(error_msg)
+        logger.exception(error_msg)
         summary["errors"].append(error_msg)
+    
+    finally:
+        db.close()
         
     logger.info(f"Resumo da ingestão de times: {summary}")
     return summary
 
 def fetch_team_season_stats(api_client: APIClient, team_id: int, season: int) -> Optional[Dict[str, Any]]:
     logger.info(f"Buscando estatísticas da temporada {season} para o time ID {team_id}...")
+    
     try:
         stats_data = api_client.get_team_statistics(team_id=team_id, season=season)
+        
         if stats_data and len(stats_data) > 0:
             logger.info(f"Estatísticas encontradas para o time ID {team_id} na temporada {season}.")
             return stats_data[0]
         logger.warning(f"Nenhuma estatística encontrada para o time ID {team_id} na temporada {season}.")
         return None
+    
     except Exception as e:
         logger.error(f"Erro ao buscar estatísticas para o time ID {team_id} na temporada {season}: {e}")
         return None
 
 def transform_team_season_stats(team_id: int, season: int, stats_data: Dict[str, Any]) -> Dict[str, Any]:
     logger.info(f"Transformando estatísticas da temporada para o time ID {team_id}...")
+    
     payload_stats = {
         "team_id": team_id,
         "season": season,
@@ -130,10 +154,21 @@ def transform_team_season_stats(team_id: int, season: int, stats_data: Dict[str,
         "turnovers": stats_data.get("turnovers"),
         "blocks": stats_data.get("blocks"),
         "plus_minus": stats_data.get("plusMinus"),
+        "fast_break_points": stats_data.get("fastBreakPoints"),
+        "points_in_paint": stats_data.get("pointsInPaint"),
+        "biggest_lead": stats_data.get("biggestLead"),
+        "second_chance_points": stats_data.get("secondChancePoints"),
+        "points_off_turnovers": stats_data.get("pointsOffTurnovers"),
+        "longest_run": stats_data.get("longestRun"),
         "payload_hash": generate_payload_hash(stats_data)
     }
-    stats_schema = TeamSeasonStatisticsCreate(**payload_stats)
-    return stats_schema.model_dump()
+    try:
+        stats_schema = TeamSeasonStatisticsCreate(**payload_stats)
+        return stats_schema.model_dump()
+    except Exception as e:
+        logger.error(f"Erro ao transformar estatísticas da temporada para o time ID {team_id}: {e}")
+        logger.debug(f"Payload de estatísticas com erro: {payload_stats}")
+        return None
 
 def ingest_team_season_statistics(db: Session, api_client: APIClient, season: int) -> Dict[str, Any]:
     summary = {"source": "teams_season_stats", "season": season, "status": "failure", "processed": 0, "errors": []}
@@ -141,25 +176,41 @@ def ingest_team_season_statistics(db: Session, api_client: APIClient, season: in
     
     try:
         teams_in_db = db.query(Team).filter(Team.is_nba_franchise == True).all()
+        
         if not teams_in_db:
             summary["errors"].append("Nenhum time NBA encontrado no banco de dados para ingestão de estatísticas.")
             return summary
         logger.info(f"Encontrados {len(teams_in_db)} times NBA no banco de dados para ingestão de estatísticas.")
         
+        processed_count = 0
         for team in teams_in_db:
             stats_data = fetch_team_season_stats(api_client, team.source_id, season)
+            
             if stats_data:
                 stats_schema = transform_team_season_stats(team.source_id, season, stats_data)
-                stats_to_upsert.append(stats_schema)
+                if stats_schema:
+                    stats_to_upsert.append(stats_schema)
+            
+            processed_count += 1
+            if processed_count % 10 == 0:
+                logger.info(f"Processados {processed_count}/{len(teams_in_db)} times para estatísticas da temporada {season}...")    
+        
         if stats_to_upsert:
             logger.info(f"Iniciando upsert de {len(stats_to_upsert)} estatísticas de temporada de times no banco de dados...")
             upsert_bulk(db=db, model=TeamSeasonStatistics, payloads=stats_to_upsert, unique_key=["team_id", "season"])
             logger.info(f"Upsert concluído para {len(stats_to_upsert)} estatísticas de temporada de times.")
+            
+            db.commit()
+            
             summary["status"] = "success"
             summary["processed"] = len(stats_to_upsert)
     except Exception as e:
+        db.rollback()
         error_msg = f"Erro geral na ingestão de estatísticas de temporada de times: {e}"
-        logger.error(error_msg)
+        logger.exception(error_msg)
         summary["errors"].append(error_msg)
+    finally:
+        db.close()
+    
     logger.info(f"Resumo da ingestão de estatísticas de temporada de times: {summary}")
     return summary

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.services.api_client import ApiClient
-from app.models.player_models import Player, PlayerLeague
+from app.models.player_models import Player, PlayerLeague, PlayerStatistics
 from app.models.team_models import Team
 from app.models.game_models import Game
 from app.repository.ingestion_repository import upsert_bulk
@@ -103,14 +103,107 @@ def ingest_players(db: Session, api_client: ApiClient, season: int) -> Dict[str,
             logger.info(f"Inserindo/atualizando {len(league_to_upsert)} afiliações de jogadores...")
             upsert_bulk(db=db, model=PlayerLeague, payloads=league_to_upsert, unique_key="id")
         
+        db.commit()
+        
         summary["status"] = "success"
         summary["processed"] = len(players_to_upsert)
         logger.info(f"Ingestão de jogadores concluída com sucesso para a temporada {season}.")
     
     except Exception as e:
+        db.rollback()
         error_msg = f"Erro durante a ingestão de jogadores para a temporada {season}: {e}"
-        logger.error(error_msg)
+        logger.exception(error_msg)
         summary["errors"].append(error_msg)
-    
+    finally:
+        db.close()
     logger.info(f"Resumo da ingestão de jogadores: {summary}")
+    return summary
+
+def fetch_player_stats(api_client: ApiClient, season: int, player_id: int) -> Optional[List[Dict[str, Any]]]:
+    logger.info(f"Buscando estatísticas para o jogador {player_id} na temporada {season}.")
+    
+    try:
+        stats_data = api_client.get_player_stats(player_id=player_id, season=season)
+        if stats_data:
+            logger.info(f"Encontradas {len(stats_data)} estatísticas para o jogador {player_id} na temporada {season}.")
+            return stats_data
+        logger.warning(f"Nenhuma estatística encontrada para o jogador {player_id} na temporada {season}.")
+        return None
+    except Exception as e:
+        logger.error(f"Erro ao buscar estatísticas para o jogador {player_id} na temporada {season}: {e}")
+        return None
+
+def transform_player_stats(stats_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    stats_to_upsert = []
+    
+    for raw_stat in stats_data:
+        payload_stat = {
+            "player_id": raw_stat["player"]["id"],
+            "team_id": raw_stat["team"]["id"],
+            "game_id": raw_stat["game"]["id"],
+            "points": raw_stat.get("points"),
+            "position": raw_stat.get("pos"),
+            "min_played": raw_stat.get("min"),
+            "fgm": raw_stat.get("fgm"),
+            "fga": raw_stat.get("fga"),
+            "fgp": raw_stat.get("fgp"),
+            "ftm": raw_stat.get("ftm"),
+            "fta": raw_stat.get("fta"),
+            "ftp": raw_stat.get("ftp"),
+            "tpm": raw_stat.get("tpm"),
+            "tpa": raw_stat.get("tpa"),
+            "tpp": raw_stat.get("tpp"),
+            "off_reb": raw_stat.get("offReb"),
+            "def_reb": raw_stat.get("defReb"),
+            "tot_reb": raw_stat.get("totReb"),
+            "assists": raw_stat.get("assists"),
+            "p_fouls": raw_stat.get("pFouls"),
+            "steals": raw_stat.get("steals"),
+            "turnovers": raw_stat.get("turnovers"),
+            "blocks": raw_stat.get("blocks"),
+            "plus_minus": raw_stat.get("plusMinus"),
+            "payload_hash": generate_payload_hash(raw_stat)
+        }
+        stat_data = PlayerStatisticsCreate(**payload_stat)
+        stats_to_upsert.append(stat_data.model_dump())
+    
+    return stats_to_upsert
+
+def ingest_player_stats(db: Session, api_client: ApiClient, season: int) -> Dict[str, Any]:    
+    summary = {"source": "player_stats", "season": season, "status": "failure", "processed": 0, "errors": []}
+    stats_to_upsert = []
+    
+    try:
+        players_in_db = db.query(Player).all()
+        if not players_in_db:
+            logger.warning("Nenhum jogador encontrado no banco de dados para ingestão de estatísticas.")
+            summary["errors"].append("Nenhum jogador encontrado no banco de dados.")
+            return summary
+        
+        logger.info(f"Iniciando ingestão de estatísticas de jogadores para {len(players_in_db)} jogadores na temporada {season}.")
+        for player in players_in_db:
+            stats_data = fetch_player_stats(api_client, season, player.source_id)
+            if stats_data:
+                transformed_stats = transform_player_stats(stats_data)
+                stats_to_upsert.extend(transformed_stats)
+
+        if stats_to_upsert:
+            logger.info(f"Inserindo/atualizando {len(stats_to_upsert)} registros de estatísticas de jogadores...")
+            upsert_bulk(db=db, model=PlayerStatistics, payloads=stats_to_upsert, unique_key="id")
+        
+        db.commit()
+        
+        summary["status"] = "success"
+        summary["processed"] = len(stats_to_upsert)
+        logger.info(f"Ingestão de estatísticas de jogadores concluída com sucesso para a temporada {season}.")
+    
+    except Exception as e:
+        db.rollback()
+        error_msg = f"Erro durante a ingestão de estatísticas de jogadores para a temporada {season}: {e}"
+        logger.exception(error_msg)
+        summary["errors"].append(error_msg)
+    finally:
+        db.close()
+        
+    logger.info(f"Resumo da ingestão de estatísticas de jogadores: {summary}")
     return summary

@@ -48,25 +48,31 @@ def transform_leagues_data(league_data: List[Union[str, Dict[str, Any]]]) -> Lis
             logger.warning(f"Formato de dado inesperado: {item}")
             continue
         
-        payload_hash = generate_payload_hash(payload)
-        league_schema = LeagueCreate(**payload, payload_hash=payload_hash)
-        transform_data.append(league_schema.model_dump())
+        payload_hash = generate_payload_hash(item)
         
+        try:
+            league_schema = LeagueCreate(**payload, payload_hash=payload_hash)
+            transform_data.append(league_schema.model_dump())
+            
+        except Exception as e:
+            logger.error(f"Erro ao transformar dado da liga {item}: {e}")
+            logger.debug(f"Dado problemático: {item}")
+            
     logger.info(f"Transformação concluída para {len(transform_data)} ligas")
     return transform_data
 
-def upsert_leagues(db_session: Session, leagues_data: List[Dict[str, Any]]) -> None:
+def upsert_leagues(db: Session, leagues_data: List[Dict[str, Any]]) -> None:
     if not leagues_data:
         logger.info("Nenhum dado de liga para inserir no banco.")
         return
     try:
         logger.info(f"Iniciando upsert para {len(leagues_data)} ligas")
-        upsert_bulk(db=db_session, model=League, payloads=leagues_data, unique_key="source_id")
+        upsert_bulk(db=db, model=League, payloads=leagues_data, unique_key="source_id")
         logger.info("Upsert concluído com sucesso")
     except Exception as e:
         logger.error(f"Erro durante o upsert das ligas: {e}")
 
-def ingest_leagues(api_client: APIClient, db_session: Session) -> Dict[str, Any]:
+def ingest_leagues(api_client: APIClient, db: Session) -> Dict[str, Any]:
     summary = {"source": "leagues", "status": "failure", "processed": 0, "errors": []}
     
     try:
@@ -75,14 +81,22 @@ def ingest_leagues(api_client: APIClient, db_session: Session) -> Dict[str, Any]
             logger.info("Iniciando o processo de ingestão de ligas")
             transform_leagues = transform_leagues_data(league_data)
             
-            upsert_leagues(db_session, transform_leagues)
+            upsert_leagues(db, transform_leagues)
+            
+            db.commit()
             summary["status"] = "success"
             summary["processed"] = len(transform_leagues)
+        else:
+            logger.warning("Nenhum dado de liga foi recuperado para ingestão")
+            summary["status"] = "no_data"
     
     except Exception as e:
+        db.rollback()
         error_msg = f"Erro durante a ingestão de ligas: {e}"
-        logger.error(error_msg)
+        logger.exception(error_msg)
         summary["errors"].append(error_msg)
-    
+    finally:
+        db.close()
+        
     logger.info(f"Resumo da ingestão: {summary}")
     return summary
