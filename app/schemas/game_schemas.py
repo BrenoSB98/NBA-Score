@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 import decimal
@@ -31,6 +31,12 @@ class TeamStatisticsBase(BaseModel):
     team_id: int
     game_id: int
     points: Optional[int] = None
+    fast_break_points: Optional[int] = None,
+    points_in_paint: Optional[int] = None,
+    biggest_lead: Optional[int] = None,
+    second_chance_points: Optional[int] = None,
+    points_off_turnovers: Optional[int] = None,
+    longest_run: Optional[int] = None,
     fgm: Optional[int] = None
     fga: Optional[int] = None
     fgp: Optional[decimal.Decimal] = None
@@ -61,43 +67,6 @@ class TeamStatistics(TeamStatisticsBase):
     class Config:
         from_attributes = True
 
-class PlayerStatisticsBase(BaseModel):
-    player_id: int
-    team_id: int
-    game_id: int
-    points: Optional[int] = None
-    position: Optional[str] = None
-    min_played: Optional[str] = None
-    fgm: Optional[int] = None
-    fga: Optional[int] = None
-    fgp: Optional[decimal.Decimal] = None
-    ftm: Optional[int] = None
-    fta: Optional[int] = None
-    ftp: Optional[decimal.Decimal] = None
-    tpm: Optional[int] = None
-    tpa: Optional[int] = None
-    tpp: Optional[decimal.Decimal] = None
-    off_reb: Optional[int] = None
-    def_reb: Optional[int] = None
-    tot_reb: Optional[int] = None
-    assists: Optional[int] = None
-    p_fouls: Optional[int] = None
-    steals: Optional[int] = None
-    turnovers: Optional[int] = None
-    blocks: Optional[int] = None
-    plus_minus: Optional[str] = None
-
-class PlayerStatisticsCreate(PlayerStatisticsBase):
-    pass
-
-class PlayerStatistics(PlayerStatisticsBase):
-    id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-        
 class TeamGameLogBase(BaseModel):
     team_id: int
     game_id: int
