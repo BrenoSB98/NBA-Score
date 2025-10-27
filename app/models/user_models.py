@@ -7,7 +7,6 @@ from app.core.database import Base
 from app.models.mixins import TimestampMixin
 
 class UserRole(str, enum.Enum):
-    """Define os papéis (roles) possíveis para um usuário."""
     ADMIN = "admin"
     USER = "user"
 
@@ -26,6 +25,9 @@ class User(Base, TimestampMixin):
 
     email_verification_token: Mapped[str | None] = mapped_column(String, index=True)
     email_verification_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    
+    password_reset_token: Mapped[str | None] = mapped_column(String, index=True)
+    password_reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     def __repr__(self) -> str:
         return f"<Usuário(id={self.id}, email='{self.email}')>"
