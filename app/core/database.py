@@ -2,12 +2,13 @@ import logging
 from typing import Generator
 from sqlalchemy import create_engine, text, String, Integer, Float, Boolean
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
-from app.core.config import settings
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 engine = create_engine(
-    settings.database_url,
+    str(settings.database_url),
     pool_pre_ping=True,
     echo=False
 )
@@ -23,14 +24,14 @@ Base = declarative_base(
     }
 )
 
-def get_db() -> Generator[Session, None, None]:
+def get_db() -> Generator:
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-def check_db_connection() -> bool:
+def check_db_connection():
     db: Session | None = None
     try:
         db = SessionLocal()

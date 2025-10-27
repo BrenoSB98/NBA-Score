@@ -1,6 +1,10 @@
 from pydantic import PostgresDsn, AnyHttpUrl, field_validator, computed_field, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List, Optional, Union, Any
+from pydantic_settings import BaseSettings
+from typing import List, Optional, Any
+from pathlib import Path
+
+BASE_DIR = Path(__file__).parent.parent.parent
+ENV_PATH = BASE_DIR / ".env"
 
 class Settings(BaseSettings):
     
@@ -75,11 +79,11 @@ class Settings(BaseSettings):
         return []
     
     # --- Configurações do Pydantic V2 ---
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        alias_generator=lambda field_name: field_name.upper(),
-        extra='ignore'
-    )
+    class Config:
+        env_file=ENV_PATH,
+        env_file_encoding="utf-8"
 
-settings = Settings()
+from functools import lru_cache
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
