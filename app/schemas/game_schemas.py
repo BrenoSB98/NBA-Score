@@ -24,8 +24,9 @@ class Game(GameBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class TeamStatisticsBase(BaseModel):
     team_id: int
@@ -64,8 +65,9 @@ class TeamStatistics(TeamStatisticsBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class TeamGameLogBase(BaseModel):
     team_id: int
@@ -99,5 +101,6 @@ class TeamGameLog(TeamGameLogBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }

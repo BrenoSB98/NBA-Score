@@ -24,6 +24,6 @@ class Standing(StandingBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }

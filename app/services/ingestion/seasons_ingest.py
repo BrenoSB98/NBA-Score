@@ -11,7 +11,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def fetch_seasons(api_client: ApiClient) -> Optional[List[int]]:
-    """Fetch seasons data from the external API."""
     logger.info("Buscando temporadas na API externa...")
     
     try:
@@ -25,7 +24,6 @@ def fetch_seasons(api_client: ApiClient) -> Optional[List[int]]:
         return None
 
 def transform_season_data(seasons_data: List[int]) -> List[Dict[str, Any]]:
-    """Transform raw season data into SeasonCreate schema."""
     logger.info(f"Transformando {len(seasons_data)} registros de temporadas.")
     transformed_seasons = []
     

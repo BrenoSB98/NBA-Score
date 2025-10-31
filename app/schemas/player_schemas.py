@@ -16,8 +16,9 @@ class PlayerLeague(PlayerLeagueBase):
     id: int
     player_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class PlayerBase(BaseModel):
     source_id: int
@@ -40,8 +41,9 @@ class Player(PlayerBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class PlayerStatisticsBase(BaseModel):
     player_id: int
@@ -77,6 +79,7 @@ class PlayerStatistics(PlayerStatisticsBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
         

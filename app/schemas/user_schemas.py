@@ -56,8 +56,9 @@ class User(UserBase):
     is_verified: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class UserInDB(User):
     hashed_password: str
